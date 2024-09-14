@@ -1,0 +1,4 @@
+rich
+opencv-python
+pillow
+tqdm
