@@ -34,7 +34,7 @@ This project generates a mosaic image by recreating a target image using smaller
 2. **Run the mosaic generator:**
    - Use the following command to create the mosaic:
      ```bash
-     python mosaic_generator.py --target-image path/to/target_image.jpg --tiles-path path/to/image_database/ --output path/to/output_mosaic.jpg --tile-size 50 --partition-size 50
+     python mosaic_image.py --target-image path/to/target_image.jpg --tiles-path path/to/image_database/ --output path/to/output_mosaic.jpg --tile-size 50 --partition-size 50
      ```
    - Replace the paths and `tile_size` with your desired values.
 
@@ -50,7 +50,7 @@ See the OpenCV documentation for more information on histogram comparison method
 ## Example
 
 ```bash
-python mosaic_generator.py --target-image images/sunset.jpg --tiles-path images/tiles/ --output output/mosaic_sunset.jpg --tile-size 50 --partition-size 50
+python mosaic_image.py --target-image images/sunset.jpg --tiles-path images/tiles/ --output output/mosaic_sunset.jpg --tile-size 50 --partition-size 50
 ```
 
 This will create a mosaic of the `sunset.jpg` image using tiles from the `images/tiles/` directory and save the mosaic to `output/mosaic_sunset.jpg`.

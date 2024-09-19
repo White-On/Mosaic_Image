@@ -88,6 +88,21 @@ def similarityMatrix(listImage1, listImage2, compare_method=cv2.HISTCMP_INTERSEC
 
     return S
 
+def colorSimilarityMatrix(listImage1, listImage2):
+    S = np.zeros((len(listImage1), len(listImage2)))
+    progress_bar = tqdm(
+        total=len(listImage1), ncols=100, desc="Creating similarity matrix"
+    )
+
+    for i, img1 in enumerate(listImage1):
+        progress_bar.update(1)
+        for j, img2 in enumerate(listImage2):
+            S[i, j] = np.linalg.norm(img1 - img2)
+
+    progress_bar.close()
+
+    return S
+
 
 args = parse_args()
 tiles_path = Path(args.tiles_path)
@@ -112,6 +127,9 @@ console.print(f"Resizing tiles to new size: {new_tiles_size}")
 tiles_images = np.zeros(
     (len(tiles_files), new_tiles_size[0], new_tiles_size[1], 3), dtype=np.uint8
 )
+tiles_size_partition = np.zeros(
+    (len(tiles_files), partition_size[0], partition_size[1], 3), dtype=np.uint8
+)
 
 progress_bar = tqdm(total=len(tiles_files), ncols=100, desc="Processing tiles")
 
@@ -120,13 +138,18 @@ for i, tile_file in enumerate(tiles_files):
     progress_bar.update(1)
     progress_bar.set_description(f"Processing {tile_file.name}")
     try:
+        img = Image.open(tile_file).convert("RGB")
         preprocess_tile = np.asarray(
-            Image.open(tile_file).convert("RGB").resize(new_tiles_size)
+            img.resize(new_tiles_size)
+        )
+        img_same_size_partition = np.asarray(
+            img.resize(partition_size)
         )
     except Exception as e:
         console.print(f"\n[red bold]Error[/] : Issue with: {tile_file.name} - {e}")
         continue
     tiles_images[i] = preprocess_tile
+    tiles_size_partition[i] = img_same_size_partition
 
 progress_bar.close()
 
@@ -147,7 +170,8 @@ console.print(
 preprocess_tiles_img = tiles_images
 
 console.print("Creating similarity matrix")
-S = similarityMatrix(partitioned_img, preprocess_tiles_img, compare_method)
+# S = similarityMatrix(partitioned_img, preprocess_tiles_img, compare_method)
+S = colorSimilarityMatrix(partitioned_img, tiles_size_partition)
 console.print(f"Similarity matrix created. Shape: {S.shape}")
 
 # NOW WE CREATE THE MOSAIC
@@ -155,7 +179,12 @@ console.print("Creating mosaic image ...")
 mosaic = np.zeros(
     (len(partitioned_img), new_tiles_size[0], new_tiles_size[1], 3), dtype=np.uint8
 )
+
 for i in range(len(partitioned_img)):
+    # we take the 5 most similar tiles
+    # top5_idx = np.argsort(S[i])[-5:]
+    # # we take the most similar tile
+    # idx = np.random.choice(top5_idx)
     idx = np.argmax(S[i])
     mosaic[i] = np.array(preprocess_tiles_img[idx])
 
