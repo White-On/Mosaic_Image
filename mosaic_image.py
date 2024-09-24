@@ -5,6 +5,8 @@ from tqdm import tqdm
 import numpy as np
 import cv2
 import argparse
+import matplotlib.pyplot as plt
+import chime
 
 
 def parse_args():
@@ -86,7 +88,8 @@ def similarityMatrix(listImage1, listImage2, compare_method=cv2.HISTCMP_INTERSEC
 
     progress_bar.close()
 
-    return S
+    return S*-1
+
 
 def colorSimilarityMatrix(listImage1, listImage2):
     S = np.zeros((len(listImage1), len(listImage2)))
@@ -97,7 +100,26 @@ def colorSimilarityMatrix(listImage1, listImage2):
     for i, img1 in enumerate(listImage1):
         progress_bar.update(1)
         for j, img2 in enumerate(listImage2):
+            # change dtype to int16 to avoid overflow
+            img1 = img1.astype(np.int16)
+            img2 = img2.astype(np.int16)
             S[i, j] = np.linalg.norm(img1 - img2)
+
+    progress_bar.close()
+
+    return S
+
+
+def averageColorMatrix(listImage1, listImage2):
+    S = np.zeros((len(listImage1), len(listImage2)))
+    progress_bar = tqdm(
+        total=len(listImage1), ncols=100, desc="Creating similarity matrix"
+    )
+
+    for i, img1 in enumerate(listImage1):
+        progress_bar.update(1)
+        for j, img2 in enumerate(listImage2):
+            S[i, j] = np.linalg.norm(np.mean(img1, axis=2) - np.mean(img2, axis=2))
 
     progress_bar.close()
 
@@ -119,6 +141,7 @@ possible_methods = {
 compare_method = possible_methods[args.method]
 
 console = Console()
+chime.theme("sonic")
 
 tiles_files = list(tiles_path.glob("*"))
 
@@ -132,21 +155,16 @@ tiles_size_partition = np.zeros(
 )
 
 progress_bar = tqdm(total=len(tiles_files), ncols=100, desc="Processing tiles")
-
 for i, tile_file in enumerate(tiles_files):
-
     progress_bar.update(1)
     progress_bar.set_description(f"Processing {tile_file.name}")
     try:
         img = Image.open(tile_file).convert("RGB")
-        preprocess_tile = np.asarray(
-            img.resize(new_tiles_size)
-        )
-        img_same_size_partition = np.asarray(
-            img.resize(partition_size)
-        )
+        preprocess_tile = np.asarray(img.resize(new_tiles_size))
+        img_same_size_partition = np.asarray(img.resize(partition_size))
     except Exception as e:
         console.print(f"\n[red bold]Error[/] : Issue with: {tile_file.name} - {e}")
+        chime.error()
         continue
     tiles_images[i] = preprocess_tile
     tiles_size_partition[i] = img_same_size_partition
@@ -163,6 +181,11 @@ console.print(f"Partitioning target image with size: {partition_size}")
 partitioned_img, new_width, new_height = partion_target_image(
     target_image, partition_size
 )
+
+# partition = Path() / "partition"
+# partition.mkdir()
+# [Image.fromarray(img).save(partition/f"{i}.png") for i, img in enumerate(partitioned_img)]
+
 console.print(
     f"The target image has been partitioned into {(new_width, new_height)} tiles."
 )
@@ -170,9 +193,14 @@ console.print(
 preprocess_tiles_img = tiles_images
 
 console.print("Creating similarity matrix")
-# S = similarityMatrix(partitioned_img, preprocess_tiles_img, compare_method)
+# S = similarityMatrix(partitioned_img, tiles_size_partition, compare_method)
 S = colorSimilarityMatrix(partitioned_img, tiles_size_partition)
+# S = averageColorMatrix(partitioned_img, tiles_size_partition)
 console.print(f"Similarity matrix created. Shape: {S.shape}")
+plt.figure(figsize=(10, 10))
+plt.imshow(S, cmap="hot", interpolation="nearest")
+plt.colorbar()
+plt.savefig("similarity_matrix.png")
 
 # NOW WE CREATE THE MOSAIC
 console.print("Creating mosaic image ...")
@@ -180,13 +208,30 @@ mosaic = np.zeros(
     (len(partitioned_img), new_tiles_size[0], new_tiles_size[1], 3), dtype=np.uint8
 )
 
+fig, ax = plt.subplots(figsize=(10, 10))
+plt.imshow(np.ones((new_width, new_height, 3)), cmap="gray")
+plt.axis("off")
+
 for i in range(len(partitioned_img)):
     # we take the 5 most similar tiles
     # top5_idx = np.argsort(S[i])[-5:]
     # # we take the most similar tile
     # idx = np.random.choice(top5_idx)
-    idx = np.argmax(S[i])
+    # idx = np.argmax(S[i])
+    idx = np.argmin(S[i])
+    ax.text(
+        i // new_height,
+        i % new_height,
+        f"{idx}",
+        ha="center",
+        va="center",
+        color="black",
+        fontsize=6,
+    )
     mosaic[i] = np.array(preprocess_tiles_img[idx])
+
+
+plt.savefig("mosaic.png")
 
 mosaic_image = np.zeros(
     (new_width * new_tiles_size[0], new_height * new_tiles_size[1], 3), dtype=np.uint8
@@ -200,5 +245,6 @@ for i in range(new_width):
 
 Image.fromarray(mosaic_image).save(mosaic_image_path)
 console.print(
-    f"Mosaic image created [green bold]succefully[/] and saved to {mosaic_image_path}"
+    f"Mosaic image created [green bold]succefully[/] and saved as {mosaic_image_path}"
 )
+chime.success()
