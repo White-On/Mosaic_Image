@@ -2,3 +2,4 @@ rich
 opencv-python
 pillow
 tqdm
+chime

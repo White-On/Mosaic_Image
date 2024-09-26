@@ -49,6 +49,20 @@ def parse_args():
         choices=["correlation", "chi-square", "intersection", "bhattacharyya"],
         help="Method used to compare histogram. Use the OpenCV method name. more info: https://docs.opencv.org/4.x/d8/dc8/tutorial_histogram_comparison.html",
     )
+    parser.add_argument(
+        "--max-random-range",
+        type=int,
+        default=5,
+        help="Number of most similar tiles to choose from.",
+    )
+    parser.add_argument(
+        "--select-frequency",
+        type=str,
+        default="best",
+        choices=["best", "uniform", "normal"],
+        help="Frequency of selecting the most similar tiles.",
+    )
+
     return parser.parse_args()
 
 
@@ -88,7 +102,7 @@ def similarityMatrix(listImage1, listImage2, compare_method=cv2.HISTCMP_INTERSEC
 
     progress_bar.close()
 
-    return S*-1
+    return S * -1
 
 
 def colorSimilarityMatrix(listImage1, listImage2):
@@ -119,6 +133,9 @@ def averageColorMatrix(listImage1, listImage2):
     for i, img1 in enumerate(listImage1):
         progress_bar.update(1)
         for j, img2 in enumerate(listImage2):
+            # change dtype to int16 to avoid overflow
+            img1 = img1.astype(np.int16)
+            img2 = img2.astype(np.int16)
             S[i, j] = np.linalg.norm(np.mean(img1, axis=2) - np.mean(img2, axis=2))
 
     progress_bar.close()
@@ -126,125 +143,124 @@ def averageColorMatrix(listImage1, listImage2):
     return S
 
 
-args = parse_args()
-tiles_path = Path(args.tiles_path)
-target_image_path = Path(args.target_image)
-mosaic_image_path = Path(args.output)
-partition_size = tuple(args.partition_size)
-new_tiles_size = tuple(args.tile_size)
-possible_methods = {
-    "correlation": cv2.HISTCMP_CORREL,
-    "chi-square": cv2.HISTCMP_CHISQR,
-    "intersection": cv2.HISTCMP_INTERSECT,
-    "bhattacharyya": cv2.HISTCMP_BHATTACHARYYA,
-}
-compare_method = possible_methods[args.method]
+def normale(x, mu, sigma):
+    return (1 / (np.sqrt(2 * np.pi) * sigma)) * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
 
-console = Console()
-chime.theme("sonic")
 
-tiles_files = list(tiles_path.glob("*"))
+def main():
+    args = parse_args()
+    tiles_path = Path(args.tiles_path)
+    target_image_path = Path(args.target_image)
+    mosaic_image_path = Path(args.output)
+    partition_size = tuple(args.partition_size)
+    new_tiles_size = tuple(args.tile_size)
+    available_methods = {
+        "correlation": cv2.HISTCMP_CORREL,
+        "chi-square": cv2.HISTCMP_CHISQR,
+        "intersection": cv2.HISTCMP_INTERSECT,
+        "bhattacharyya": cv2.HISTCMP_BHATTACHARYYA,
+    }
+    compare_method = available_methods[args.method]
 
-console.print(f"Number of tiles: {len(tiles_files)}")
-console.print(f"Resizing tiles to new size: {new_tiles_size}")
-tiles_images = np.zeros(
-    (len(tiles_files), new_tiles_size[0], new_tiles_size[1], 3), dtype=np.uint8
-)
-tiles_size_partition = np.zeros(
-    (len(tiles_files), partition_size[0], partition_size[1], 3), dtype=np.uint8
-)
+    console = Console()
+    chime.theme("sonic")
 
-progress_bar = tqdm(total=len(tiles_files), ncols=100, desc="Processing tiles")
-for i, tile_file in enumerate(tiles_files):
-    progress_bar.update(1)
-    progress_bar.set_description(f"Processing {tile_file.name}")
-    try:
-        img = Image.open(tile_file).convert("RGB")
-        preprocess_tile = np.asarray(img.resize(new_tiles_size))
-        img_same_size_partition = np.asarray(img.resize(partition_size))
-    except Exception as e:
-        console.print(f"\n[red bold]Error[/] : Issue with: {tile_file.name} - {e}")
-        chime.error()
-        continue
-    tiles_images[i] = preprocess_tile
-    tiles_size_partition[i] = img_same_size_partition
+    tiles_files = list(tiles_path.glob("*"))
 
-progress_bar.close()
-
-console.print(f"Number of preprocess tiles: {len(tiles_images)}")
-
-# Load target image
-target_image = np.asarray(Image.open(target_image_path))
-
-# Partition target image
-console.print(f"Partitioning target image with size: {partition_size}")
-partitioned_img, new_width, new_height = partion_target_image(
-    target_image, partition_size
-)
-
-# partition = Path() / "partition"
-# partition.mkdir()
-# [Image.fromarray(img).save(partition/f"{i}.png") for i, img in enumerate(partitioned_img)]
-
-console.print(
-    f"The target image has been partitioned into {(new_width, new_height)} tiles."
-)
-
-preprocess_tiles_img = tiles_images
-
-console.print("Creating similarity matrix")
-# S = similarityMatrix(partitioned_img, tiles_size_partition, compare_method)
-S = colorSimilarityMatrix(partitioned_img, tiles_size_partition)
-# S = averageColorMatrix(partitioned_img, tiles_size_partition)
-console.print(f"Similarity matrix created. Shape: {S.shape}")
-plt.figure(figsize=(10, 10))
-plt.imshow(S, cmap="hot", interpolation="nearest")
-plt.colorbar()
-plt.savefig("similarity_matrix.png")
-
-# NOW WE CREATE THE MOSAIC
-console.print("Creating mosaic image ...")
-mosaic = np.zeros(
-    (len(partitioned_img), new_tiles_size[0], new_tiles_size[1], 3), dtype=np.uint8
-)
-
-fig, ax = plt.subplots(figsize=(10, 10))
-plt.imshow(np.ones((new_width, new_height, 3)), cmap="gray")
-plt.axis("off")
-
-for i in range(len(partitioned_img)):
-    # we take the 5 most similar tiles
-    # top5_idx = np.argsort(S[i])[-5:]
-    # # we take the most similar tile
-    # idx = np.random.choice(top5_idx)
-    # idx = np.argmax(S[i])
-    idx = np.argmin(S[i])
-    ax.text(
-        i // new_height,
-        i % new_height,
-        f"{idx}",
-        ha="center",
-        va="center",
-        color="black",
-        fontsize=6,
+    console.print(f"Number of tiles: {len(tiles_files)}")
+    console.print(f"Resizing tiles to new size: {new_tiles_size}")
+    tiles_images = np.zeros(
+        (len(tiles_files), new_tiles_size[0], new_tiles_size[1], 3), dtype=np.uint8
     )
-    mosaic[i] = np.array(preprocess_tiles_img[idx])
+    tiles_size_partition = np.zeros(
+        (len(tiles_files), partition_size[0], partition_size[1], 3), dtype=np.uint8
+    )
+
+    progress_bar = tqdm(total=len(tiles_files), ncols=100, desc="Processing tiles")
+    for i, tile_file in enumerate(tiles_files):
+        progress_bar.update(1)
+        progress_bar.set_description(f"Processing {tile_file.name}")
+        try:
+            img = Image.open(tile_file).convert("RGB")
+            preprocess_tile = np.asarray(img.resize(new_tiles_size))
+            img_same_size_partition = np.asarray(img.resize(partition_size))
+        except Exception as e:
+            console.print(f"\n[red bold]Error[/] : Issue with: {tile_file.name} - {e}")
+            chime.error()
+            continue
+        tiles_images[i] = preprocess_tile
+        tiles_size_partition[i] = img_same_size_partition
+
+    progress_bar.close()
+
+    console.print(f"Number of preprocess tiles: {len(tiles_images)}")
+
+    # Load target image
+    target_image = np.asarray(Image.open(target_image_path))
+
+    # Partition target image
+    console.print(f"Partitioning target image with size: {partition_size}")
+    partitioned_img, new_width, new_height = partion_target_image(
+        target_image, partition_size
+    )
+
+    # partition = Path() / "partition"
+    # partition.mkdir()
+    # [Image.fromarray(img).save(partition/f"{i}.png") for i, img in enumerate(partitioned_img)]
+
+    console.print(
+        f"The target image has been partitioned into {(new_width, new_height)} tiles."
+    )
+
+    preprocess_tiles_img = tiles_images
+
+    console.print("Creating similarity matrix")
+    # S = similarityMatrix(partitioned_img, tiles_size_partition, compare_method)
+    S = colorSimilarityMatrix(partitioned_img, tiles_size_partition)
+    # S = averageColorMatrix(partitioned_img, tiles_size_partition)
+    console.print(f"Similarity matrix created. Shape: {S.shape}")
+
+    # NOW WE CREATE THE MOSAIC
+    console.print("Creating mosaic image ...")
+    max_random_range = args.max_random_range
+    choose_best_frequency = [1] + [0] * (max_random_range - 1)
+    choose_uniform_frequency = [1 / max_random_range] * max_random_range
+    choose_normal_frequency = [normale(i, 0, 1) for i in range(max_random_range)]
+    select_frequency = {
+        "best": choose_best_frequency,
+        "uniform": choose_uniform_frequency,
+        "normal": choose_normal_frequency,
+    }[args.select_frequency]
+
+    mosaic = np.zeros(
+        (len(partitioned_img), new_tiles_size[0], new_tiles_size[1], 3), dtype=np.uint8
+    )
+
+    for i in range(len(partitioned_img)):
+        # we take the max_random_range most similar tiles
+        top_idx = np.argsort(S[i])[-max_random_range:]
+        idx = np.random.choice(top_idx, p=select_frequency)
+        # idx = np.argmax(S[i])
+        # idx = np.argmin(S[i])
+        mosaic[i] = np.array(preprocess_tiles_img[idx])
+
+    mosaic_image = np.zeros(
+        (new_width * new_tiles_size[0], new_height * new_tiles_size[1], 3),
+        dtype=np.uint8,
+    )
+    for i in range(new_width):
+        for j in range(new_height):
+            mosaic_image[
+                i * new_tiles_size[0] : (i + 1) * new_tiles_size[0],
+                j * new_tiles_size[1] : (j + 1) * new_tiles_size[1],
+            ] = mosaic[i * new_height + j]
+
+    Image.fromarray(mosaic_image).save(mosaic_image_path)
+    console.print(
+        f"Mosaic image created [green bold]succefully[/] and saved as {mosaic_image_path}"
+    )
+    chime.success()
 
 
-plt.savefig("mosaic.png")
-
-mosaic_image = np.zeros(
-    (new_width * new_tiles_size[0], new_height * new_tiles_size[1], 3), dtype=np.uint8
-)
-for i in range(new_width):
-    for j in range(new_height):
-        mosaic_image[
-            i * new_tiles_size[0] : (i + 1) * new_tiles_size[0],
-            j * new_tiles_size[1] : (j + 1) * new_tiles_size[1],
-        ] = mosaic[i * new_height + j]
-
-Image.fromarray(mosaic_image).save(mosaic_image_path)
-console.print(
-    f"Mosaic image created [green bold]succefully[/] and saved as {mosaic_image_path}"
-)
-chime.success()
+if __name__ == "__main__":
+    main()
