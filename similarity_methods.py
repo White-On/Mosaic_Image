@@ -3,7 +3,12 @@ import numpy as np
 from tqdm import tqdm
 
 
-def histogramSimilarityMatrix(listImage1, listImage2, compare_method=cv2.HISTCMP_INTERSECT):
+def histogramSimilarityMatrix(
+    listImage1: list, listImage2: list, compare_method=cv2.HISTCMP_INTERSECT, **kwargs
+) -> np.ndarray:
+    """
+    Calculate the histogram similarity between each image
+    """
     S = np.zeros((len(listImage1), len(listImage2)))
     progress_bar = tqdm(
         total=len(listImage1), ncols=100, desc="Creating similarity matrix"
@@ -28,7 +33,10 @@ def histogramSimilarityMatrix(listImage1, listImage2, compare_method=cv2.HISTCMP
     return S * -1
 
 
-def colorSimilarityMatrix(listImage1, listImage2, **kwargs):
+def colorSimilarityMatrix(listImage1: list, listImage2: list, **kwargs) -> np.ndarray:
+    """
+    Calculate the euclidean distance between each image
+    """
     S = np.zeros((len(listImage1), len(listImage2)))
     progress_bar = tqdm(
         total=len(listImage1), ncols=100, desc="Creating similarity matrix"
@@ -47,7 +55,10 @@ def colorSimilarityMatrix(listImage1, listImage2, **kwargs):
     return S
 
 
-def averageColorMatrix(listImage1, listImage2, **kwargs):
+def averageColorMatrix(listImage1: list, listImage2: list, **kwargs) -> np.ndarray:
+    """
+    Calculate the average color of each image and then calculate the euclidean distance between them
+    """
     S = np.zeros((len(listImage1), len(listImage2)))
     progress_bar = tqdm(
         total=len(listImage1), ncols=100, desc="Creating similarity matrix"
