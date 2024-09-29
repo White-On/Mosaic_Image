@@ -1,10 +1,14 @@
 
 # Mosaic Image Project 🎨🖼️🧩
 
-# TODO : Finish README.md + add example images
-
 ## Project Overview
 This project generates a mosaic image by recreating a target image using smaller images from a database. The smaller images (tiles) are selected based on their color similarity to the corresponding regions in the target image, creating a visually mosaic effect.
+
+<img src="cat_photo.jpg" width="300"/>
+<img src="mosaic_cat_photo.png" width="300"/>
+
+<img src="digital_draw.jpg" width="400"/>
+<img src="mosaic_digital_draw.png" width="400"/>
 
 ## Features
 - Create mosaic images from any target image.
@@ -15,8 +19,8 @@ This project generates a mosaic image by recreating a target image using smaller
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/mosaic-image-project.git
-   cd mosaic-image-project
+   git clone https://github.com/White-On/Mosaic_Image
+   cd Mosaic_Image
    ```
 
 2. **Install the required dependencies:**
@@ -36,9 +40,8 @@ This project generates a mosaic image by recreating a target image using smaller
 2. **Run the mosaic generator:**
    - Use the following command to create the mosaic:
      ```bash
-     python mosaic_image.py --target-image path/to/target_image.jpg --tiles-path path/to/image_database/ --output path/to/output_mosaic.jpg --tile-size 50 --partition-size 50
+     python mosaic_image.py --target-image path/to/target_image.jpg --tiles-path path/to/image_database/ --output path/to/output_mosaic.jpg 
      ```
-   - Replace the paths and `tile_size` with your desired values.
 
 3. **Parameters:**
    - `--target-image`: Path to the image you want to recreate as a mosaic.
@@ -46,13 +49,17 @@ This project generates a mosaic image by recreating a target image using smaller
    - `--output`: Path where the generated mosaic image will be saved.
    - `--tile-size`: Size of the tiles in the mosaic (default is 50 pixels).
    - `--partition-size`: The target image is partitioned into tiles of this size (default is 50 pixels).
-   - `--method`: Method used to compare histogram, you can choose between `correlation`, `chi-square`, `intersection`, and `bhattacharyya` (default is `intersection`).
+   - `--similarity-method`: Method used to compare color similarity between tiles, you can choose between `average`, `histogram`, and `color` (default is `color`).
+   - `--histo-method`: Method used to compare histogram (if similarity method is histogram), you can choose between `correlation`, `chi-square`, `intersection`, and `bhattacharyya` (default is `intersection`).
 See the OpenCV documentation for more information on histogram comparison methods: [OpenCV Doc](https://docs.opencv.org/4.x/d8/dc8/tutorial_histogram_comparison.html)
+   - `--max-random-range`: Maximum number of random tiles to be selected for each partition (default is 5).
+   - `--select-frequency`: Frequency of selecting the most similar tiles. You can choose between `best`, `uniform` or `normal` (`best` is default and `normal` is usefull for images with very uniform area and when the image database is big enouth)
+   - `--unsafe`: Disable safety checks ( won't allow to run for some parameter combo).
 
 ## Example
 
 ```bash
-python mosaic_image.py --target-image images/sunset.jpg --tiles-path images/tiles/ --output output/mosaic_sunset.jpg --tile-size 50 --partition-size 50
+python mosaic_image.py --target-image images/sunset.jpg --tiles-path images/tiles/ --output output/mosaic_sunset.jpg --tile-size 50 50 --partition-size 25 25 --similarity-method color --max-random-range 10 --select-frequency normal
 ```
 
 This will create a mosaic of the `sunset.jpg` image using tiles from the `images/tiles/` directory and save the mosaic to `output/mosaic_sunset.jpg`.
