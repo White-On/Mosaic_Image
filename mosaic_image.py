@@ -32,6 +32,8 @@ FREQUENCY_METHODS = {
     "normal": lambda x: generate_normal_distribution(x, 0, 1),
 }
 
+SIMILARITY_MATRIX_SIZE_LIMIT = 1_000_000
+MAX_SIZE_MOSAIC_IMAGE = [10_000, 10_000]
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -92,6 +94,11 @@ def parse_args() -> argparse.Namespace:
         default="best",
         choices=["best", "uniform", "normal"],
         help="Frequency of selecting the most similar tiles.",
+    )
+    parser.add_argument(
+        "--unsafe",
+        action="store_false",
+        help="Disable safety checks ( won't allow some parameter combo depending on the images inputed ).",
     )
 
     return parser.parse_args()
@@ -229,12 +236,47 @@ def adaptive_partition_size(target_image: np.ndarray) -> tuple:
     width, height = target_image.shape[:2]
     nb_pieces_target_image = 100
     partition_size = (width // nb_pieces_target_image, height // nb_pieces_target_image)
+    # by default, the partition size is a square  so we take the max of the two dimensions
+    partition_size = (max(partition_size), max(partition_size))
+    # we set a safety net to avoid partition size of 0
     if partition_size[0] == 0 or partition_size[1] == 0:
         print(
             f"[red bold]Warning[/] : The target image is small. The partition size is set to (1, 1)."
         )
         partition_size = (1, 1)
     return partition_size
+
+def safety_checks(partition_size: tuple, new_tiles_size: tuple, tiles_path) -> bool:
+    number_of_tiles = len(list(tiles_path.glob("*")))
+        
+    expected_similarity_matrix_size = number_of_tiles * partition_size[0] * partition_size[1]
+    if expected_similarity_matrix_size > SIMILARITY_MATRIX_SIZE_LIMIT:
+        print(
+            f"[red bold]Error[/] : The similarity matrix will be too big to fit in memory (Expected similarity matrix size: {expected_similarity_matrix_size})."
+        )
+        print(
+            f"Please choose a smaller partition size or a smaller number of tiles."
+        )
+        print(
+            f"If you believe that your system can handle it, you can disable the safety checks with the `--unsafe` flag."
+        )
+        chime.error(sync=True)
+        return False
+    
+    expected_final_mosaic_size = partition_size[0] * new_tiles_size[0], partition_size[1] * new_tiles_size[1]
+    if expected_final_mosaic_size[0] > MAX_SIZE_MOSAIC_IMAGE[0] or expected_final_mosaic_size[1] > MAX_SIZE_MOSAIC_IMAGE[1]:
+        print(
+            f"[red bold]Error[/] : The final mosaic image will be too big (Expected mosaic image size: {expected_final_mosaic_size})."
+        )
+        print(
+            f"Please choose a smaller partition size or a smaller number of tiles."
+        )
+        print(
+            f"If you believe that your system can handle it, you can disable the safety checks with the `--unsafe` flag."
+        )
+        chime.error(sync=True)
+        return False
+    return True
 
 
 def main():
@@ -251,6 +293,14 @@ def main():
     frequency = FREQUENCY_METHODS.get(args.select_frequency)(max_random_range)
     chosen_similarity_method = SIMILARITY_MATRIX_METHODS.get(args.similarity_method)
     chosen_histo_method = HISTOGRAM_COMPARE_METHODS.get(args.histo_method)
+    safe_mode = args.unsafe
+
+    if not safe_mode:
+        print(f"\n[yellow bold]Warning[/] : Safety checks are disabled.")
+        print(
+            f"Be careful with the parameters you choose, it could lead to memory errors or bad results.\n"
+        )
+        chime.warning(sync=True)
 
     # Load target image
     target_image = np.asarray(Image.open(target_image_path))
@@ -272,10 +322,9 @@ def main():
     # check that the tile size is positive
     new_tiles_size = tuple([max(1, size) for size in new_tiles_size])
 
-    # TODO :
-    # - add more error handling
-    # - adaptative partition size to the picture size
-    # - memory seems to be a problem with big images -> safety net to avoid memory error
+    if safe_mode:
+        if not safety_checks(partition_size, new_tiles_size, tiles_path):
+            return
 
     # We resize the tiles to the new size, this way we ensure that the tiles are all the same size
     # and that the mosaic image will have a uniform look.

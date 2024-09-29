@@ -1,6 +1,8 @@
 
 # Mosaic Image Project 🎨🖼️🧩
 
+# TODO : Finish README.md + add example images
+
 ## Project Overview
 This project generates a mosaic image by recreating a target image using smaller images from a database. The smaller images (tiles) are selected based on their color similarity to the corresponding regions in the target image, creating a visually mosaic effect.
 
