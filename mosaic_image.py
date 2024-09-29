@@ -174,27 +174,53 @@ def prepare_tiles(tiles_path: Path, tile_size: tuple, partition_size: tuple) -> 
 
 
 def create_mosaic(
-    partitioned_img: list,
+    tiles_images: np.ndarray,
+    similarity_matrix: np.ndarray,
+    max_random_range: int,
+    frequency: list,
+    new_width: int,
+    new_height: int,
+    new_tiles_size: tuple,
+) -> np.ndarray:
+    """
+    Create the mosaic image from the tiles images and the similarity matrix.
+    """
+    tile_height, tile_width = new_tiles_size
+    mosaic_image = np.zeros(
+        (new_width * tile_height, new_height * tile_width, 3), dtype=np.uint8
+    )
+
+    for i in range(new_width):
+        for j in range(new_height):
+            # Logique pour sélectionner l'image de tuile appropriée
+            partitioned_idx = i * new_height + j
+            selected_tile = select_tile(
+                partitioned_idx,
+                tiles_images,
+                similarity_matrix,
+                max_random_range,
+                frequency,
+            )
+            start_row, end_row = i * tile_height, (i + 1) * tile_height
+            start_col, end_col = j * tile_width, (j + 1) * tile_width
+            mosaic_image[start_row:end_row, start_col:end_col] = selected_tile
+
+    return mosaic_image
+
+
+def select_tile(
+    partitioned_idx: int,
     tiles_images: np.ndarray,
     similarity_matrix: np.ndarray,
     max_random_range: int,
     frequency: list,
 ) -> np.ndarray:
     """
-    Create the mosaic image by selecting the most similar tiles for each partitioned image.
+    Select the tile to use in the mosaic image.
     """
-
-    mosaic = np.zeros(
-        (len(partitioned_img), tiles_images.shape[1], tiles_images.shape[2], 3),
-        dtype=np.uint8,
-    )
-
-    for i in range(len(partitioned_img)):
-        top_idx = np.argsort(similarity_matrix[i])[:max_random_range]
-        idx = np.random.choice(top_idx, p=frequency)
-        mosaic[i] = np.array(tiles_images[idx])
-
-    return mosaic
+    top_idx = np.argsort(similarity_matrix[partitioned_idx])[:max_random_range]
+    idx = np.random.choice(top_idx, p=frequency)
+    return np.array(tiles_images[idx])
 
 
 def main():
@@ -214,8 +240,7 @@ def main():
 
     # TODO :
     # - add more error handling
-    # - the last part can be improved in one step
-    # - adaptative partition size to the picture size 
+    # - adaptative partition size to the picture size
     # - memory seems to be a problem with big images -> safety net to avoid memory error
 
     # We resize the tiles to the new size, this way we ensure that the tiles are all the same size
@@ -248,22 +273,15 @@ def main():
     )
 
     # Create mosaic image
-    vector_mosaic = create_mosaic(
-        partitioned_img, tiles_images, similarity_matrix, max_random_range, frequency
+    mosaic_image = create_mosaic(
+        tiles_images,
+        similarity_matrix,
+        max_random_range,
+        frequency,
+        new_width,
+        new_height,
+        new_tiles_size,
     )
-
-    tile_height, tile_width = new_tiles_size
-    mosaic_image = np.zeros(
-        (new_width * tile_height, new_height * tile_width, 3), dtype=np.uint8
-    )
-
-    for i in range(new_width):
-        for j in range(new_height):
-            start_row, end_row = i * tile_height, (i + 1) * tile_height
-            start_col, end_col = j * tile_width, (j + 1) * tile_width
-            mosaic_image[start_row:end_row, start_col:end_col] = vector_mosaic[
-                i * new_height + j
-            ]
 
     Image.fromarray(mosaic_image).save(mosaic_image_path)
     print(

@@ -42,7 +42,9 @@ def colorSimilarityMatrix(listImage1: list, listImage2: list, **kwargs) -> np.nd
     listImage2 = [img.astype(np.int16) for img in listImage2]
 
     S = np.zeros((len(listImage1), len(listImage2)))
-    progress_bar = tqdm(total=len(listImage1), ncols=100, desc="Creating similarity matrix")
+    progress_bar = tqdm(
+        total=len(listImage1), ncols=100, desc="Creating similarity matrix"
+    )
 
     for i, img1 in enumerate(listImage1):
         progress_bar.update(1)
