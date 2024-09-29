@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
         "--partition-size",
         type=int,
         nargs=2,
-        default=[50, 50],
+        default=[None, None],
         help="The target image is partitioned into tiles of this size.",
     )
     parser.add_argument(
@@ -152,9 +152,9 @@ def prepare_tiles(tiles_path: Path, tile_size: tuple, partition_size: tuple) -> 
         progress_bar.update(1)
         progress_bar.set_description(f"Processing {tile_file.name}")
         try:
-            img = Image.open(tile_file).convert("RGB")
-            preprocess_tile = np.asarray(img.resize(tile_size))
-            img_same_size_partition = np.asarray(img.resize(partition_size))
+            img = Image.open(tile_file).convert("RGB")  
+            preprocess_tile = np.asarray(img.resize(tile_size[::-1]))
+            img_same_size_partition = np.asarray(img.resize(partition_size[::-1]))
         except Exception as e:
             print(f"\n[red bold]Error[/] : Issue with: {tile_file.name} - {e}")
             print(f"Be careful that all the files in the directory are images")
@@ -222,6 +222,20 @@ def select_tile(
     idx = np.random.choice(top_idx, p=frequency)
     return np.array(tiles_images[idx])
 
+def adaptive_partition_size(target_image: np.ndarray) -> tuple:
+    """
+    Calculate the partition size based on the target image size with a safety net.
+    """
+    width, height = target_image.shape[:2]
+    nb_pieces_target_image = 100
+    partition_size = (width // nb_pieces_target_image, height // nb_pieces_target_image)
+    if partition_size[0] == 0 or partition_size[1] == 0:
+        print(
+            f"[red bold]Warning[/] : The target image is small. The partition size is set to (1, 1)."
+        )
+        partition_size = (1, 1)
+    return partition_size
+
 
 def main():
 
@@ -238,6 +252,26 @@ def main():
     chosen_similarity_method = SIMILARITY_MATRIX_METHODS.get(args.similarity_method)
     chosen_histo_method = HISTOGRAM_COMPARE_METHODS.get(args.histo_method)
 
+    # Load target image
+    target_image = np.asarray(Image.open(target_image_path))
+
+    # check that the partition size is not bigger than the target image size or negative
+    if partition_size[0] is None or partition_size[1] is None:
+        partition_size = adaptive_partition_size(target_image)
+    elif partition_size[0] > target_image.shape[0] or partition_size[1] > target_image.shape[1]:
+        print(
+            f"[red bold]Error[/] : The partition size is bigger than the target image size."
+        )
+        chime.error(sync=True)
+        return
+    elif partition_size[0] <= 0 or partition_size[1] <= 0:
+        print(f"[red bold]Error[/] : The partition size must be positive.")
+        chime.error(sync=True)
+        return
+    
+    # check that the tile size is positive
+    new_tiles_size = tuple([max(1, size) for size in new_tiles_size])
+
     # TODO :
     # - add more error handling
     # - adaptative partition size to the picture size
@@ -249,9 +283,6 @@ def main():
     tiles_images, tiles_size_partition = prepare_tiles(
         tiles_path, new_tiles_size, partition_size
     )
-
-    # Load target image
-    target_image = np.asarray(Image.open(target_image_path))
 
     # Partition target image
     # This means that we divide the target image into smaller images.
