@@ -37,18 +37,19 @@ def colorSimilarityMatrix(listImage1: list, listImage2: list, **kwargs) -> np.nd
     """
     Calculate the euclidean distance between each image
     """
+    # Convert all images to int16 to avoid overflow
+    listImage1 = [img.astype(np.int16) for img in listImage1]
+    listImage2 = [img.astype(np.int16) for img in listImage2]
+
     S = np.zeros((len(listImage1), len(listImage2)))
-    progress_bar = tqdm(
-        total=len(listImage1), ncols=100, desc="Creating similarity matrix"
-    )
+    progress_bar = tqdm(total=len(listImage1), ncols=100, desc="Creating similarity matrix")
 
     for i, img1 in enumerate(listImage1):
         progress_bar.update(1)
-        for j, img2 in enumerate(listImage2):
-            # change dtype to int16 to avoid overflow
-            img1 = img1.astype(np.int16)
-            img2 = img2.astype(np.int16)
-            S[i, j] = np.linalg.norm(img1 - img2)
+        # Vectorized computation of distances
+        differences = np.array(listImage2) - img1
+        distances = np.linalg.norm(differences.reshape(len(listImage2), -1), axis=1)
+        S[i, :] = distances
 
     progress_bar.close()
 

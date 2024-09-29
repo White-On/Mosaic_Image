@@ -215,6 +215,8 @@ def main():
     # TODO :
     # - add more error handling
     # - the last part can be improved in one step
+    # - adaptative partition size to the picture size 
+    # - memory seems to be a problem with big images -> safety net to avoid memory error
 
     # We resize the tiles to the new size, this way we ensure that the tiles are all the same size
     # and that the mosaic image will have a uniform look.
