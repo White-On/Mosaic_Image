@@ -246,13 +246,13 @@ def adaptive_partition_size(target_image: np.ndarray) -> tuple:
         partition_size = (1, 1)
     return partition_size
 
-def safety_checks(partition_size: tuple, new_tiles_size: tuple, tiles_path) -> bool:
+def safety_checks(partition_size: tuple, new_tiles_size: tuple, tiles_path: Path, nb_pieces_target_image: int) -> bool:
     number_of_tiles = len(list(tiles_path.glob("*")))
-        
-    expected_similarity_matrix_size = number_of_tiles * partition_size[0] * partition_size[1]
+    
+    expected_similarity_matrix_size = number_of_tiles * nb_pieces_target_image
     if expected_similarity_matrix_size > SIMILARITY_MATRIX_SIZE_LIMIT:
         print(
-            f"[red bold]Error[/] : The similarity matrix will be too big to fit in memory (Expected similarity matrix size: {expected_similarity_matrix_size})."
+            f"[red bold]Error[/] : The similarity matrix will be too big to fit in memory (Expected similarity matrix size: [blue bold] {number_of_tiles}x{nb_pieces_target_image})[/]."
         )
         print(
             f"Please choose a smaller partition size or a smaller number of tiles."
@@ -303,7 +303,17 @@ def main():
         chime.warning(sync=True)
 
     # Load target image
-    target_image = np.asarray(Image.open(target_image_path))
+    try:
+        target_image = np.asarray(Image.open(target_image_path).convert("RGB"))
+        print(f"Target image loaded from: {target_image_path}")
+        print(f"Target image size: {target_image.shape}")
+        if len(target_image.shape) == 2:
+            target_image = cv2.cvtColor(target_image, cv2.COLOR_GRAY2RGB)
+
+    except Exception as e:
+        print(f"[red bold]Error[/] : Issue with: {target_image_path.name} - {e}")
+        chime.error(sync=True)
+        return
 
     # check that the partition size is not bigger than the target image size or negative
     if partition_size[0] is None or partition_size[1] is None:
@@ -318,21 +328,26 @@ def main():
         print(f"[red bold]Error[/] : The partition size must be positive.")
         chime.error(sync=True)
         return
+    elif (partition_size[0] > 100 or partition_size[1] > 100) and safe_mode:
+        print(
+            f"[yellow bold]Warning[/] : The partition size is big. Please choose a smaller partition size."
+        )
+        print(
+            f"If you believe that your system can handle it, you can disable the safety checks with the `--unsafe` flag."
+        )
+        chime.warning(sync=True)
+        partition_size = [100, 100]
     
     # check that the tile size is positive
     new_tiles_size = tuple([max(1, size) for size in new_tiles_size])
-
-    if safe_mode:
-        if not safety_checks(partition_size, new_tiles_size, tiles_path):
-            return
-
-    # We resize the tiles to the new size, this way we ensure that the tiles are all the same size
-    # and that the mosaic image will have a uniform look.
-    # We keep also resize the tiles to the partition size of the target image to compare them later.
-    tiles_images, tiles_size_partition = prepare_tiles(
-        tiles_path, new_tiles_size, partition_size
-    )
-
+    # check that the tile size is not bigger than the partition size
+    if new_tiles_size[0] > partition_size[0] or new_tiles_size[1] > partition_size[1]:
+        print(
+            f"[red bold]Error[/] : The tile size is bigger than the partition size."
+        )
+        chime.error(sync=True)
+        return
+        
     # Partition target image
     # This means that we divide the target image into smaller images.
     # We can lose some pixels if the target image size is not a multiple of the partition size.
@@ -342,7 +357,20 @@ def main():
     )
 
     print(
-        f"The target image has been partitioned into {(new_width, new_height)} smaller images."
+        f"The target image has been partitioned into smaller images of size: {new_width}x{new_height}"
+    )
+
+    # Safety checks
+    nb_pieces_target_image = new_width * new_height
+    if safe_mode:
+        if not safety_checks(partition_size, new_tiles_size, tiles_path, nb_pieces_target_image):
+            return
+
+    # We resize the tiles to the new size, this way we ensure that the tiles are all the same size
+    # and that the mosaic image will have a uniform look.
+    # We keep also resize the tiles to the partition size of the target image to compare them later.
+    tiles_images, tiles_size_partition = prepare_tiles(
+        tiles_path, new_tiles_size, partition_size
     )
 
     # Create similarity matrix
