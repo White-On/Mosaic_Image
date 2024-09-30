@@ -353,11 +353,7 @@ def main():
 
     # check that the tile size is positive
     new_tiles_size = tuple([max(1, size) for size in new_tiles_size])
-    # check that the tile size is not bigger than the partition size
-    if new_tiles_size[0] > partition_size[0] or new_tiles_size[1] > partition_size[1]:
-        print(f"[red bold]Error[/] : The tile size is bigger than the partition size.")
-        chime.error(sync=True)
-        return
+    
 
     # Partition target image
     # This means that we divide the target image into smaller images.
